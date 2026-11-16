@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pewarnaan Graf – Welch-Powell</title>
+<style>
+:root{--paper:#f7f9fc;--ink:#16213a;--muted:#59647f;--line:#cfd8e6;--accent:#2347c5}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:1100px;margin:0 auto;padding:28px 16px 48px}
+h1,h2{font-family:Georgia,"Times New Roman",serif;font-weight:700;line-height:1.25}
+h1{font-size:1.9rem;margin:0 0 6px}
+h2{font-size:1.25rem;margin:0 0 10px}
+.sub{max-width:62ch;color:var(--muted);margin:0 0 20px}
+.grid{display:grid;grid-template-columns:1fr 290px;gap:24px;align-items:start}
+.cols{display:grid;grid-template-columns:1.1fr 1fr;gap:28px}
+@media(max-width:820px){.grid,.cols{grid-template-columns:1fr}}
+svg{display:block;width:100%;aspect-ratio:640/420;border:1.5px solid var(--ink);border-radius:4px;cursor:crosshair;touch-action:none;background-color:#fff;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:32px 32px}
+.part{border-top:1px solid var(--line);padding-top:20px;margin-top:28px}
+textarea{width:100%;min-height:76px;margin-top:6px;padding:8px;font:inherit;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:6px;resize:vertical}
+label,.muted{color:var(--muted);font-size:.92rem}
+.row{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 22px}
+button{font:inherit;padding:8px 12px;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:6px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+table{width:100%;border-collapse:collapse}
+th,td{padding:6px 8px;text-align:left;border-bottom:1px solid var(--line)}
+.chip{display:inline-block;width:12px;height:12px;margin-right:6px;border:1px solid var(--ink);border-radius:50%}
+li{margin-bottom:6px}
+.row label{color:var(--ink);font-size:1rem;cursor:pointer}
+button:disabled,button:disabled:hover{opacity:.45;cursor:default;border-color:var(--line)}
+.tabs{display:flex;gap:4px;margin:0 0 16px;border-bottom:1px solid var(--line)}
+.tabs button{padding:8px 14px;border:0;border-bottom:3px solid transparent;border-radius:0;background:none;font-weight:600}
+.tabs button[aria-selected=true]{border-bottom-color:var(--accent)}
+.sw{min-width:40px;font-weight:700;color:#16213a}
+.sw[aria-pressed=true]{outline:3px solid var(--accent);outline-offset:2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>PEWARNAAN GRAF DENGAN ALGORITMA WELCH-POWELL</h1>
+  <div class="tabs" role="tablist">
+    <button role="tab" id="t1" aria-selected="true">Welch-Powell</button>
+    <button role="tab" id="t2" aria-selected="false">Latihan</button>
+  </div>
+  <p class="sub" id="hint">Klik area kosong pada kertas untuk menambah simpul. Klik satu simpul, lalu simpul lain, untuk membuat atau menghapus sisi di antara keduanya. Seret simpul untuk memindahkannya, atau seret sebuah sisi untuk melengkungkannya. Klik simpul atau sisi untuk memilihnya, lalu hapus dengan tombol Hapus.</p>
+
+  <div class="grid">
+    <svg id="board" viewBox="0 0 640 420" role="img" aria-label="Kertas gambar graf"></svg>
+    <div>
+      <div id="s1">
+      <h2>Ubah graf</h2>
+      <div class="row">
+        <button id="undo">Urungkan</button>
+        <button id="del">Hapus yang dipilih</button>
+      </div>
+      <label><input type="checkbox" id="multi"> Izinkan loop dan sisi paralel</label>
+      <p class="muted" style="margin:4px 0 18px">Jika dicentang: klik sebuah simpul dua kali untuk membuat loop, klik dua simpul yang sudah terhubung untuk menambah sisi paralel, dan seret loop untuk memutarnya. Sisi dihapus dengan memilihnya lalu menekan Hapus.</p>
+      <h2>Bangun graf</h2>
+      <label for="edges">Atau ketik daftar sisi, dipisah koma. Simpul tanpa sisi cukup ditulis namanya. Loop ditulis A-A (kotak centang di atas harus aktif), dan sisi paralel cukup ditulis dua kali.</label>
+      <textarea id="edges" placeholder="A-B, A-C, B-C, C-D, E"></textarea>
+      <div class="row">
+        <button id="build">Buat dari teks</button>
+        <button id="sample">Pakai contoh</button>
+        <button id="clear">Kosongkan</button>
+      </div>
+      <h2>Warnai</h2>
+      <div class="row" style="margin-bottom:0" role="group" aria-label="Yang diwarnai">
+        <label><input type="radio" name="mode" value="node" checked> Simpul</label>
+        <label><input type="radio" name="mode" value="edge"> Sisi</label>
+        <label><input type="radio" name="mode" value="face"> Daerah</label>
+      </div>
+      <div class="row">
+        <button id="run" class="primary">Warnai sekaligus</button>
+        <button id="step">Langkah berikutnya</button>
+        <button id="reset">Hapus warna</button>
+      </div>
+      </div>
+      <div id="s2" hidden>
+        <h2>Pilih yang diwarnai</h2>
+        <div class="row" style="margin-bottom:0" role="group" aria-label="Yang diwarnai">
+          <label><input type="radio" name="mode2" value="node" checked> Simpul</label>
+          <label><input type="radio" name="mode2" value="edge"> Sisi</label>
+          <label><input type="radio" name="mode2" value="face"> Daerah</label>
+        </div>
+        <h2>Pilih warna</h2>
+        <div class="row" id="pal"></div>
+        <p id="status"></p>
+        <div class="row">
+          <button id="cmp" class="primary">Bandingkan dengan Welch-Powell</button>
+          <button id="wipe">Hapus warna</button>
+        </div>
+        <p id="cmpout" class="muted"></p>
+      </div>
+    </div>
+  </div>
+
+  <section class="part" id="hasil">
+    <h2>Hasil</h2>
+    <p id="summary" class="muted"></p>
+    <div class="cols">
+      <table id="table"></table>
+      <ol id="steps"></ol>
+    </div>
+  </section>
+
+  <section class="part">
+    <h2>Cara kerja</h2>
+    <p>Welch-Powell mewarnai simpul graf secara berurutan agar dua simpul yang bertetangga tidak pernah memakai warna yang sama.</p>
+    <ol>
+      <li>Hitung derajat tiap simpul, yaitu banyaknya sisi yang menempel, lalu urutkan dari yang terbesar ke yang terkecil.</li>
+      <li>Pilih satu warna. Berikan warna itu ke simpul paling atas dalam daftar, lalu telusuri daftar ke bawah dan berikan warna yang sama ke setiap simpul yang tidak bertetangga dengan simpul yang sudah memakainya.</li>
+      <li>Ambil warna baru untuk simpul yang tersisa dan ulangi sampai semua simpul terwarnai.</li>
+    </ol>
+    <p>Untuk mewarnai sisi, algoritma yang sama dijalankan pada graf garis: setiap sisi dianggap sebuah simpul, dan dua sisi dianggap bertetangga bila bertemu di satu simpul.Untuk mewarnai daerah, algoritmanya dijalankan pada graf dual: setiap daerah dianggap sebuah simpul, dan dua daerah dianggap bertetangga bila berbagi sisi batas. Pewarnaan daerah memerlukan graf yang terhubung. Jika ada sisi yang bersilangan, titik potongnya dianggap simpul bayangan sehingga gambar tetap terbagi menjadi daerah-daerah yang bisa diwarnai, dan daerah di luar gambar dihitung sebagai satu daerah. Untuk graf tidak sederhana, loop diabaikan pada pewarnaan simpul (sebuah simpul tidak dianggap bertetangga dengan dirinya sendiri) dan sisi paralel dianggap satu hubungan, sedangkan pada pewarnaan sisi keduanya tetap dihitung.</p>
+    <p class="muted">Jumlah warna yang dihasilkan menjadi batas atas bilangan kromatik graf. Hasilnya belum tentu yang paling sedikit.</p>
+  </section>
+</div>
+
+<script>
+const $=id=>document.getElementById(id),board=$('board'),NS='http://www.w3.org/2000/svg';
+const PAL=['#f87171','#60a5fa','#4ade80','#fbbf24','#c084fc','#2dd4bf','#f472b6','#a3e635','#fb923c','#818cf8'];
+const hue=k=>PAL[k]||`hsl(${k*67%360} 70% 62%)`;
+const label=i=>i<26?String.fromCharCode(65+i):'V'+(i+1);
+const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const el=(tag,attrs)=>{const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);return e};
+const mode=()=>document.querySelector(tab===2?'[name=mode2]:checked':'[name=mode]:checked').value;
+
+// Data graf: simpul {x,y,name}, sisi [indeksA, indeksB] dengan A < B
+let nodes=[],edges=[],sel=-1,selE=-1,res=null,shown=0,msg='',hist=[],tab=1,pick=0,mine={node:{},edge:{},face:{}};  // sisi: [a,b,lengkung]
+const stale=()=>{res=null;shown=0;msg='';mine={node:{},edge:{},face:{}}};
+
+function adjacency(){
+  const A=nodes.map(()=>new Set());
+  edges.forEach(([a,b])=>{if(a!==b){A[a].add(b);A[b].add(a)}});
+  return A;
+}
+
+// Inti algoritma Welch-Powell. Bekerja pada graf apa pun yang diberikan sebagai daftar tetangga.
+function welchPowell(A,deg=A.map(s=>s.size)){
+  // 1. urutkan dari derajat terbesar ke terkecil
+  const order=A.map((_,i)=>i).sort((a,b)=>deg[b]-deg[a]||a-b);
+  const col=Array(A.length).fill(-1),rounds=[];
+  let left=A.length,k=0;
+  // 2-3. satu putaran = satu warna baru
+  while(left>0){
+    const group=[];
+    for(const v of order){
+      if(col[v]!==-1)continue;                    // sudah berwarna
+      if([...A[v]].some(u=>col[u]===k))continue;  // bertetangga dengan yang berwarna k
+      col[v]=k;group.push(v);left--;
+    }
+    rounds.push({k,group});k++;
+  }
+  return {order,rounds,deg};
+}
+
+// Tiga jenis pewarnaan = tiga graf yang diberikan ke Welch-Powell.
+const nodeData=()=>({A:adjacency(),names:nodes.map(n=>n.name),deg:nodes.map((_,v)=>edges.reduce((s,[a,b])=>s+(a===v)+(b===v),0))});  // loop dihitung 2
+
+// Sisi: graf garis. Dua sisi bertetangga bila bertemu di satu simpul.
+function edgeData(){
+  if(!edges.length)return{err:'Belum ada sisi untuk diwarnai.'};
+  return{
+    names:edges.map(([a,b],i)=>`e${i+1} (${nodes[a].name}-${nodes[b].name})`),
+    A:edges.map((e,i)=>new Set(edges.flatMap((f,j)=>j!==i&&(f[0]===e[0]||f[0]===e[1]||f[1]===e[0]||f[1]===e[1])?[j]:[])))
+  };
+}
+
+const turn=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);
+
+// Simpul-simpul sepanjang sisi dari simpul pertama ke kedua. Sisi lengkung = kurva Bezier
+// dengan simpangan e[2] (piksel) tegak lurus terhadap garis lurusnya.
+function pts([a,b,bend=0]){
+  if(a===b){  // loop: kurva tetes yang mengarah ke sudut bend (derajat)
+    const p=nodes[a],th=bend*Math.PI/180,x=Math.cos(th),y=Math.sin(th),out=[];
+    const c1=[p.x+90*x-46*y,p.y+90*y+46*x],c2=[p.x+90*x+46*y,p.y+90*y-46*x];
+    for(let i=0;i<=24;i++){const t=i/24,u=1-t,A=u*u*u,B=3*u*u*t,C=3*u*t*t,D=t*t*t;out.push([A*p.x+B*c1[0]+C*c2[0]+D*p.x,A*p.y+B*c1[1]+C*c2[1]+D*p.y])}
+    return out;
+  }
+  const p=nodes[a],q=nodes[b],dx=q.x-p.x,dy=q.y-p.y,len=Math.hypot(dx,dy)||1;
+  const cx=(p.x+q.x)/2-dy/len*bend,cy=(p.y+q.y)/2+dx/len*bend,k=bend?16:1,out=[];
+  for(let i=0;i<=k;i++){const t=i/k,u=1-t;out.push([u*u*p.x+2*u*t*cx+t*t*q.x,u*u*p.y+2*u*t*cy+t*t*q.y])}
+  return out;
+}
+
+// Tambah sisi. Sisi paralel dan loop diberi lengkungan/arah berbeda agar tidak bertumpuk.
+function addEdge(a,b){
+  const [x,y]=a<b?[a,b]:[b,a],m=edges.filter(e=>e[0]===x&&e[1]===y).length;
+  const th=Math.round(Math.atan2(nodes[x].y-210,nodes[x].x-320)*180/Math.PI)+m*80;
+  edges.push([x,y,x===y?th:m?(m%2?1:-1)*Math.ceil(m/2)*50:0]);
+}
+
+// Daerah: graf dual dari gambar. Titik potong sisi dianggap simpul bayangan,
+// jadi graf yang tidak planar pun tetap punya daerah yang bisa diwarnai.
+function faceData(){
+  const n=nodes.length,P=edges.map(pts),ev=edges.map(()=>[]),cp=[];
+  for(let i=0;i<P.length;i++)for(let j=i+1;j<P.length;j++)
+    for(let s=0;s<P[i].length-1;s++)for(let t=0;t<P[j].length-1;t++){
+      const p=P[i][s],q=P[i][s+1],r=P[j][t],u=P[j][t+1];
+      const d1=turn(p,q,r),d2=turn(p,q,u),d3=turn(r,u,p),d4=turn(r,u,q);
+      if(d1*d2<0&&d3*d4<0){
+        const f=d3/(d3-d4),g=d1/(d1-d2),id=n+cp.length;
+        cp.push([p[0]+f*(q[0]-p[0]),p[1]+f*(q[1]-p[1])]);
+        ev[i].push([s+f,id]);ev[j].push([t+g,id]);
+      }
+    }
+  // pecah tiap sisi di titik potongnya menjadi potongan-potongan
+  const pc=[];
+  edges.forEach((e,i)=>{
+    const L=P[i],m=L.length-1;
+    const E=[[0,e[0],L[0]],...ev[i].sort((x,y)=>x[0]-y[0]).map(([a,id])=>[a,id,cp[id-n]]),[m,e[1],L[m]]];
+    for(let k=0;k<E.length-1;k++){
+      const [a,u,pu]=E[k],[b,v,pv]=E[k+1],mid=[];
+      for(let j=Math.floor(a)+1;j<b;j++)mid.push(L[j]);
+      pc.push({u,v,pts:[pu,...mid,pv]});
+    }
+  });
+  // setiap potongan punya dua arah (2i dan 2i+1); di tiap simpul, arah keluar diurutkan menurut sudut
+  const NV=n+cp.length,out=Array.from({length:NV},()=>[]);
+  const dir=h=>{const q=pc[h>>1].pts;return h&1?[...q].reverse():q};
+  const en=h=>h&1?pc[h>>1].u:pc[h>>1].v;
+  pc.forEach((x,i)=>{out[x.u].push(2*i);out[x.v].push(2*i+1)});
+  const ang=h=>{const d=dir(h);return Math.atan2(d[1][1]-d[0][1],d[1][0]-d[0][0])};
+  out.forEach(l=>l.sort((a,b)=>ang(a)-ang(b)));
+  const seen=new Set([0]),Q=[0];
+  for(const v of Q)for(const h of out[v]){const w=en(h);if(!seen.has(w)){seen.add(w);Q.push(w)}}
+  if(seen.size<NV)return{err:'Pewarnaan daerah memerlukan graf yang terhubung.'};
+  // telusuri batas tiap daerah: setelah tiba di simpul, belok ke arah berikutnya menurut urutan sudut
+  const face=new Map(),walks=[];
+  for(let h0=0;h0<2*pc.length;h0++){
+    if(face.has(h0))continue;
+    const w=[];let h=h0;
+    while(!face.has(h)){
+      face.set(h,walks.length);w.push(h);
+      const l=out[en(h)];h=l[(l.indexOf(h^1)+l.length-1)%l.length];
+    }
+    walks.push(w);
+  }
+  if(!walks.length)return{A:[new Set()],names:['R1 (luar)'],polys:[null]};
+  // daerah luar = telusuran dengan luas terkecil (berlawanan arah dengan daerah dalam)
+  const poly=w=>w.flatMap(h=>dir(h).slice(0,-1));
+  const area=g=>g.reduce((s,p,i)=>{const q=g[(i+1)%g.length];return s+p[0]*q[1]-q[0]*p[1]},0);
+  const ar=walks.map(w=>area(poly(w))),o=ar.indexOf(Math.min(...ar));
+  const idx=walks.map((_,i)=>i===o?0:i<o?i+1:i);
+  const polys=[null,...walks.filter((_,i)=>i!==o).map(poly)];
+  const D=walks.map(()=>new Set());
+  pc.forEach((_,i)=>{
+    const f=idx[face.get(2*i)],g=idx[face.get(2*i+1)];
+    if(f!==g){D[f].add(g);D[g].add(f)}
+  });
+  return{A:D,names:D.map((_,i)=>'R'+(i+1)+(i?'':' (luar)')),polys};
+}
+
+function start(){
+  res=null;shown=0;msg='';
+  if(!nodes.length)return;
+  const kind=mode(),d={node:nodeData,edge:edgeData,face:faceData}[kind]();
+  if(d.err)msg=d.err;else res={kind,...d,...welchPowell(d.A,d.deg)};
+}
+
+function colors(){
+  const c=res?Array(res.names.length).fill(-1):[];
+  if(res)res.rounds.slice(0,shown).forEach(r=>r.group.forEach(v=>c[v]=r.k));
+  return c;
+}
+
+function render(){
+  board.replaceChildren();
+  const v=view(),c=v.c,kind=v.kind;
+  if(kind==='face'&&v.polys){
+    const inner=v.polys.slice(1),fill=i=>c[i]<0?'none':hue(c[i]);
+    board.append(el('path',{'data-f':0,d:'M0 0H640V420H0Z'+inner.map(p=>'M'+p.join('L')+'Z').join(''),style:`fill:${fill(0)};fill-rule:evenodd;fill-opacity:.5;pointer-events:all`}));
+    inner.forEach((p,i)=>board.append(el('polygon',{'data-f':i+1,points:p.join(' '),style:`fill:${fill(i+1)};fill-opacity:.7;pointer-events:all;stroke:${v.bad.has(i+1)?'#dc2626':'none'};stroke-width:4`})));
+  }
+  edges.forEach((e,i)=>{
+    const d='M'+pts(e).join('L'),ln=(w,s)=>board.append(el('path',{d,style:`fill:none;stroke-linejoin:round;stroke:${s};stroke-width:${w}`}));
+    if(i===selE)ln(9,'var(--accent)');
+    if(kind==='edge'&&c[i]>=0){ln(8,v.bad.has(i)?'#dc2626':'var(--ink)');ln(4,hue(c[i]))}else ln(2,'var(--ink)');
+    if(tab===1||kind==='edge')board.append(el('path',{d,'data-e':i,style:'fill:none;stroke:transparent;stroke-width:16;cursor:pointer;pointer-events:stroke'}));
+  });
+  nodes.forEach((n,i)=>{
+    const k=kind==='node'?c[i]:-1,bad=kind==='node'&&v.bad.has(i),g=el('g',{'data-i':i,style:'cursor:pointer'});
+    g.append(el('circle',{cx:n.x,cy:n.y,r:20,style:`fill:${k<0?'#fff':hue(k)};stroke:${bad?'#dc2626':i===sel?'var(--accent)':'var(--ink)'};stroke-width:${bad||i===sel?5:2}`}));
+    const t=el('text',{x:n.x,y:n.y+5,'text-anchor':'middle','font-size':15,'font-weight':700,'pointer-events':'none',style:'fill:var(--ink)'});
+    t.textContent=n.name;g.append(t);board.append(g);
+  });
+  $('undo').disabled=!hist.length;$('del').disabled=sel<0&&selE<0;
+  tab===1?info():info2(v);
+}
+
+function info(){
+  const m=$('summary');
+  if(!res){
+    $('table').innerHTML=$('steps').innerHTML='';
+    m.textContent=msg||(nodes.length?`${nodes.length} simpul dan ${edges.length} sisi. Pilih yang diwarnai, lalu tekan "Warnai sekaligus" atau "Langkah berikutnya".`:'Graf masih kosong. Klik kertas di atas untuk menambah simpul.');
+    return;
+  }
+  const c=colors(),T={node:'Simpul',edge:'Sisi',face:'Daerah'}[res.kind],t=T.toLowerCase();
+  $('table').innerHTML=`<tr><th>Urutan</th><th>${T}</th><th>${res.kind==='node'?'Derajat':'Tetangga'}</th><th>Warna</th></tr>`+
+    res.order.map((v,j)=>`<tr><td>${j+1}</td><td>${esc(res.names[v])}</td><td>${res.deg[v]}</td><td>${c[v]<0?'-':`<i class="chip" style="background:${hue(c[v])}"></i>${c[v]+1}`}</td></tr>`).join('');
+  $('steps').innerHTML=res.rounds.slice(0,shown).map(r=>`<li>Warna ${r.k+1} untuk ${t} ${r.group.map(v=>esc(res.names[v])).join(', ')}</li>`).join('');
+  m.textContent=shown<res.rounds.length?`Putaran ${shown} dari ${res.rounds.length}.`:`Selesai: ${t} pada graf ini dapat diwarnai dengan ${res.rounds.length} warna.`;
+}
+
+function nextName(){let i=0;while(nodes.some(n=>n.name===label(i)))i++;return label(i)}
+function toggleEdge(a,b){
+  const [x,y]=a<b?[a,b]:[b,a],k=edges.findIndex(e=>e[0]===x&&e[1]===y);
+  k<0?edges.push([x,y]):edges.splice(k,1);
+}
+
+// Urungkan: simpan salinan graf sebelum tiap perubahan
+const snap=()=>{hist.push(JSON.stringify({nodes,edges}));if(hist.length>100)hist.shift()};
+function undo(){
+  if(!hist.length)return;
+  ({nodes,edges}=JSON.parse(hist.pop()));
+  sel=selE=-1;stale();render();
+}
+function del(){
+  if(sel>=0){
+    snap();const s=sel;nodes.splice(s,1);
+    edges=edges.filter(e=>e[0]!==s&&e[1]!==s).map(e=>e.map((v,k)=>k<2&&v>s?v-1:v));
+  }else if(selE>=0){snap();edges.splice(selE,1)}
+  else return;
+  sel=selE=-1;stale();render();
+}
+
+// Klik kertas = tambah simpul, klik dua simpul = sisi, klik sisi = pilih.
+// Seret simpul = pindah, seret sisi = lengkungkan.
+const pt=e=>{
+  const q=new DOMPoint(e.clientX,e.clientY).matrixTransform(board.getScreenCTM().inverse());
+  return{x:Math.min(620,Math.max(20,q.x)),y:Math.min(400,Math.max(20,q.y))};
+};
+let drag=null;
+board.addEventListener('pointerdown',e=>{
+  if(tab!==1||e.button>0)return;
+  const g=e.target.closest('g[data-i]'),h=e.target.closest('path[data-e]');
+  drag={i:g?+g.dataset.i:-1,j:h?+h.dataset.e:-1,x:e.clientX,y:e.clientY,moved:false};
+  board.setPointerCapture(e.pointerId);
+});
+board.addEventListener('pointermove',e=>{
+  if(!drag||(drag.i<0&&drag.j<0))return;
+  if(!drag.moved){
+    if(Math.hypot(e.clientX-drag.x,e.clientY-drag.y)<6)return;
+    drag.moved=true;snap();
+  }
+  const m=pt(e);
+  if(drag.i>=0)Object.assign(nodes[drag.i],m);
+  else{  // lengkungkan: kurva mengikuti arah seretan tegak lurus terhadap sisi
+    const ed=edges[drag.j],p=nodes[ed[0]],q=nodes[ed[1]],dx=q.x-p.x,dy=q.y-p.y,len=Math.hypot(dx,dy)||1;
+    if(ed[0]===ed[1])ed[2]=Math.round(Math.atan2(m.y-p.y,m.x-p.x)*180/Math.PI);   // loop: putar
+    else{const b=2*((m.x-(p.x+q.x)/2)*-dy+(m.y-(p.y+q.y)/2)*dx)/len;ed[2]=Math.abs(b)<8?0:Math.round(b)}   // hampir lurus = lurus
+  }
+  mine.face={};if(res&&res.kind==='face')stale();   // bentuk daerah berubah
+  render();
+});
+board.addEventListener('pointerup',e=>{
+  if(!drag)return;
+  const {i,j,moved}=drag;drag=null;
+  if(moved)return;
+  if(i>=0){
+    selE=-1;
+    if(sel<0)sel=i;
+    else if(sel===i){if($('multi').checked){snap();addEdge(i,i);stale()}sel=-1}
+    else{snap();$('multi').checked?addEdge(sel,i):toggleEdge(sel,i);sel=-1;stale()}
+  }else if(j>=0){sel=-1;selE=selE===j?-1:j}
+  else{snap();nodes.push({...pt(e),name:nextName()});sel=selE=-1;stale()}
+  render();
+});
+
+function build(){
+  snap();
+  const multi=$('multi').checked,names=[],list=[],seenK=new Set();
+  const id=s=>{let i=names.indexOf(s);if(i<0)i=names.push(s)-1;return i};
+  for(const t of $('edges').value.split(/[,;\n]+/)){
+    const p=t.trim().split(/\s*[-–—]\s*/).filter(Boolean);
+    if(p.length===1)id(p[0]);
+    else if(p.length===2&&(multi||p[0]!==p[1])){
+      const a=id(p[0]),b=id(p[1]),lo=Math.min(a,b),hi=Math.max(a,b),k=lo+','+hi;
+      if(multi||!seenK.has(k)){seenK.add(k);list.push([lo,hi])}
+    }
+  }
+  const n=names.length,ang=i=>2*Math.PI*i/n-Math.PI/2;
+  nodes=names.map((name,i)=>({name,x:320+160*Math.cos(ang(i)),y:210+160*Math.sin(ang(i))}));
+  edges=[];list.forEach(([a,b])=>addEdge(a,b));sel=selE=-1;stale();render();
+}
+
+$('build').onclick=build;
+$('sample').onclick=()=>{
+  $('edges').value='A-B, A-C, A-D, A-E, B-C, C-D, D-E, E-B, E-F, C-F';build();
+  // letakkan simpul agar tidak ada sisi bersilangan (graf planar)
+  const P={A:[320,210],B:[320,90],C:[440,210],D:[320,320],E:[200,210],F:[320,385]};
+  nodes.forEach(n=>{[n.x,n.y]=P[n.name]});render();
+};
+$('clear').onclick=()=>{snap();nodes=[];edges=[];sel=selE=-1;stale();render()};
+$('run').onclick=()=>{start();if(res)shown=res.rounds.length;render()};
+$('step').onclick=()=>{if(!res)start();if(res&&shown<res.rounds.length)shown++;render()};
+$('reset').onclick=()=>{stale();render()};
+document.querySelectorAll('[name=mode]').forEach(r=>r.onchange=()=>{stale();render()});
+$('undo').onclick=undo;$('del').onclick=del;
+document.addEventListener('keydown',e=>{
+  if(tab!==1||e.target.matches('textarea'))return;
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();undo()}
+  else if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();del()}
+});
+
+// ===== Lembar 2: coba mewarnai sendiri =====
+const HINT1=$('hint').textContent;
+const HINT2='Pilih warna di panel, lalu klik simpul, sisi, atau daerah pada gambar untuk mewarnainya. Yang bertetangga tidak boleh sama warnanya. Graf dibuat dan diubah di Lembar 1.';
+const DATA={node:nodeData,edge:edgeData,face:faceData};
+
+// Yang ditampilkan: hasil Welch-Powell (lembar 1) atau warna buatan sendiri (lembar 2)
+function view(){
+  if(tab===1)return{kind:res&&res.kind,c:colors(),polys:res&&res.polys,bad:new Set()};
+  const kind=mode(),d=DATA[kind](),bad=new Set();
+  if(d.err)return{kind,err:d.err,c:[],bad};
+  const c=d.names.map((_,i)=>mine[kind][i]??-1);
+  d.A.forEach((s,i)=>s.forEach(j=>{if(c[i]>=0&&c[i]===c[j]){bad.add(i);bad.add(j)}}));
+  return{kind,d,c,bad,polys:d.polys};
+}
+
+function info2(v){
+  const T={node:'simpul',edge:'sisi',face:'daerah'}[v.kind],m=$('status');
+  $('cmpout').textContent='';
+  if(v.err){m.textContent=v.err;return}
+  const n=v.c.length,done=v.c.filter(x=>x>=0).length,used=new Set(v.c.filter(x=>x>=0)).size;
+  const bad=[...v.bad].map(i=>v.d.names[i]);
+  m.textContent=!n?'Graf masih kosong. Buat grafnya dulu di Lembar 1.'
+    :done===n&&!bad.length?`Berhasil! Semua ${T} sudah berwarna tanpa bentrokan, memakai ${used} warna.`
+    :`${done} dari ${n} ${T} sudah berwarna (${used} warna dipakai). `+(bad.length?`Bentrok karena bertetangga dan sama warnanya: ${bad.join(', ')}.`:'Belum ada bentrokan.');
+}
+
+const pal=$('pal');
+pal.innerHTML=PAL.slice(0,8).map((c,k)=>`<button class="sw" data-c="${k}" style="background:${c}" aria-label="Warna ${k+1}">${k+1}</button>`).join('')+'<button class="sw" data-c="-1">Hapus</button>';
+const marks=()=>[...pal.children].forEach(b=>b.setAttribute('aria-pressed',+b.dataset.c===pick));
+pal.onclick=e=>{const b=e.target.closest('button');if(b){pick=+b.dataset.c;marks()}};
+marks();
+
+board.addEventListener('click',e=>{
+  if(tab!==2)return;
+  const kind=mode(),t=e.target.closest('[data-i],[data-e],[data-f]'),id=t&&t.dataset[{node:'i',edge:'e',face:'f'}[kind]];
+  if(id==null)return;
+  if(pick<0)delete mine[kind][id];else mine[kind][id]=pick;
+  render();
+});
+
+$('wipe').onclick=()=>{mine={node:{},edge:{},face:{}};render()};
+$('cmp').onclick=()=>{
+  const v=view();
+  if(v.err||!v.c.length)return;
+  const k=welchPowell(v.d.A,v.d.deg).rounds.length,used=new Set(v.c.filter(x=>x>=0)).size,ok=!v.c.includes(-1)&&!v.bad.size;
+  $('cmpout').textContent=`Welch-Powell memakai ${k} warna. `+(!ok?'Selesaikan pewarnaan Anda tanpa bentrokan dulu untuk membandingkan.':used<k?`Pewarnaan Anda lebih hemat, yaitu ${used} warna. Algoritma ini memang tidak selalu menemukan jumlah paling sedikit.`:used===k?'Sama banyak dengan pewarnaan Anda.':`Pewarnaan Anda memakai ${used} warna, coba kurangi.`);
+};
+
+function setTab(n){
+  tab=n;sel=selE=-1;
+  $('t1').setAttribute('aria-selected',n===1);$('t2').setAttribute('aria-selected',n===2);
+  $('s1').hidden=n!==1;$('s2').hidden=n!==2;$('hasil').hidden=n!==1;
+  $('hint').textContent=n===1?HINT1:HINT2;
+  board.style.cursor=n===1?'':'default';
+  render();
+}
+$('t1').onclick=()=>setTab(1);$('t2').onclick=()=>setTab(2);
+document.querySelectorAll('[name=mode2]').forEach(r=>r.onchange=()=>render());
+
+render();
+</script>
+</body>
+</html>
