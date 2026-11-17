@@ -40,10 +40,10 @@ button:disabled,button:disabled:hover{opacity:.45;cursor:default;border-color:va
 </head>
 <body>
 <div class="wrap">
-  <h1>PEWARNAAN GRAF DENGAN ALGORITMA WELCH-POWELL</h1>
+  <h1>Pewarnaan graf dengan algoritma Welch-Powell</h1>
   <div class="tabs" role="tablist">
-    <button role="tab" id="t1" aria-selected="true">Welch-Powell</button>
-    <button role="tab" id="t2" aria-selected="false">Latihan</button>
+    <button role="tab" id="t1" aria-selected="true">Lembar 1: Welch-Powell</button>
+    <button role="tab" id="t2" aria-selected="false">Lembar 2: Latihan</button>
   </div>
   <p class="sub" id="hint">Klik area kosong pada kertas untuk menambah simpul. Klik satu simpul, lalu simpul lain, untuk membuat atau menghapus sisi di antara keduanya. Seret simpul untuk memindahkannya, atau seret sebuah sisi untuk melengkungkannya. Klik simpul atau sisi untuk memilihnya, lalu hapus dengan tombol Hapus.</p>
 
@@ -114,7 +114,7 @@ button:disabled,button:disabled:hover{opacity:.45;cursor:default;border-color:va
       <li>Pilih satu warna. Berikan warna itu ke simpul paling atas dalam daftar, lalu telusuri daftar ke bawah dan berikan warna yang sama ke setiap simpul yang tidak bertetangga dengan simpul yang sudah memakainya.</li>
       <li>Ambil warna baru untuk simpul yang tersisa dan ulangi sampai semua simpul terwarnai.</li>
     </ol>
-    <p>Untuk mewarnai sisi, algoritma yang sama dijalankan pada graf garis: setiap sisi dianggap sebuah simpul, dan dua sisi dianggap bertetangga bila bertemu di satu simpul.Untuk mewarnai daerah, algoritmanya dijalankan pada graf dual: setiap daerah dianggap sebuah simpul, dan dua daerah dianggap bertetangga bila berbagi sisi batas. Pewarnaan daerah memerlukan graf yang terhubung. Jika ada sisi yang bersilangan, titik potongnya dianggap simpul bayangan sehingga gambar tetap terbagi menjadi daerah-daerah yang bisa diwarnai, dan daerah di luar gambar dihitung sebagai satu daerah. Untuk graf tidak sederhana, loop diabaikan pada pewarnaan simpul (sebuah simpul tidak dianggap bertetangga dengan dirinya sendiri) dan sisi paralel dianggap satu hubungan, sedangkan pada pewarnaan sisi keduanya tetap dihitung.</p>
+    <p>Untuk mewarnai sisi, algoritma yang sama dijalankan pada graf garis: setiap sisi dianggap sebuah simpul, dan dua sisi dianggap bertetangga bila bertemu di satu simpul. Untuk mewarnai daerah, algoritmanya dijalankan pada graf dual: setiap daerah dianggap sebuah simpul, dan dua daerah dianggap bertetangga bila berbagi sisi batas. Pewarnaan daerah hanya bisa dilakukan pada graf terhubung yang tergambar tanpa sisi berpotongan (graf planar). Jika grafnya tidak planar atau masih ada sisi yang berpotongan, pewarnaan daerah tidak dapat dilakukan. Daerah di luar gambar dihitung sebagai satu daerah. Untuk graf tidak sederhana, pewarnaan simpul tidak dapat dilakukan bila ada loop, karena simpul yang punya loop bertetangga dengan dirinya sendiri; sisi paralel dianggap satu hubungan. Pada pewarnaan sisi, loop dan sisi paralel tetap dihitung.</p>
     <p class="muted">Jumlah warna yang dihasilkan menjadi batas atas bilangan kromatik graf. Hasilnya belum tentu yang paling sedikit.</p>
   </section>
 </div>
@@ -158,7 +158,9 @@ function welchPowell(A,deg=A.map(s=>s.size)){
 }
 
 // Tiga jenis pewarnaan = tiga graf yang diberikan ke Welch-Powell.
-const nodeData=()=>({A:adjacency(),names:nodes.map(n=>n.name),deg:nodes.map((_,v)=>edges.reduce((s,[a,b])=>s+(a===v)+(b===v),0))});  // loop dihitung 2
+const nodeData=()=>edges.some(e=>e[0]===e[1])
+  ?{err:'Graf memuat loop, sehingga pewarnaan simpul tidak dapat dilakukan: simpul yang punya loop bertetangga dengan dirinya sendiri.'}
+  :{A:adjacency(),names:nodes.map(n=>n.name),deg:nodes.map((_,v)=>edges.reduce((s,[a,b])=>s+(a===v)+(b===v),0))};
 
 // Sisi: graf garis. Dua sisi bertetangga bila bertemu di satu simpul.
 function edgeData(){
@@ -193,33 +195,17 @@ function addEdge(a,b){
   edges.push([x,y,x===y?th:m?(m%2?1:-1)*Math.ceil(m/2)*50:0]);
 }
 
-// Daerah: graf dual dari gambar. Titik potong sisi dianggap simpul bayangan,
-// jadi graf yang tidak planar pun tetap punya daerah yang bisa diwarnai.
+// Daerah: graf dual dari gambar. Hanya untuk gambar planar, yaitu tanpa sisi yang berpotongan.
 function faceData(){
-  const n=nodes.length,P=edges.map(pts),ev=edges.map(()=>[]),cp=[];
+  const n=nodes.length,P=edges.map(pts);
   for(let i=0;i<P.length;i++)for(let j=i+1;j<P.length;j++)
     for(let s=0;s<P[i].length-1;s++)for(let t=0;t<P[j].length-1;t++){
       const p=P[i][s],q=P[i][s+1],r=P[j][t],u=P[j][t+1];
-      const d1=turn(p,q,r),d2=turn(p,q,u),d3=turn(r,u,p),d4=turn(r,u,q);
-      if(d1*d2<0&&d3*d4<0){
-        const f=d3/(d3-d4),g=d1/(d1-d2),id=n+cp.length;
-        cp.push([p[0]+f*(q[0]-p[0]),p[1]+f*(q[1]-p[1])]);
-        ev[i].push([s+f,id]);ev[j].push([t+g,id]);
-      }
+      if(turn(p,q,r)*turn(p,q,u)<0&&turn(r,u,p)*turn(r,u,q)<0)
+        return{err:'Pewarnaan daerah tidak dapat dilakukan: graf tidak planar atau masih ada sisi yang berpotongan. Seret simpul atau lengkungkan sisi sampai tidak ada yang berpotongan.'};
     }
-  // pecah tiap sisi di titik potongnya menjadi potongan-potongan
-  const pc=[];
-  edges.forEach((e,i)=>{
-    const L=P[i],m=L.length-1;
-    const E=[[0,e[0],L[0]],...ev[i].sort((x,y)=>x[0]-y[0]).map(([a,id])=>[a,id,cp[id-n]]),[m,e[1],L[m]]];
-    for(let k=0;k<E.length-1;k++){
-      const [a,u,pu]=E[k],[b,v,pv]=E[k+1],mid=[];
-      for(let j=Math.floor(a)+1;j<b;j++)mid.push(L[j]);
-      pc.push({u,v,pts:[pu,...mid,pv]});
-    }
-  });
-  // setiap potongan punya dua arah (2i dan 2i+1); di tiap simpul, arah keluar diurutkan menurut sudut
-  const NV=n+cp.length,out=Array.from({length:NV},()=>[]);
+  // setiap sisi punya dua arah (2i dan 2i+1); di tiap simpul, arah keluar diurutkan menurut sudut
+  const pc=edges.map((e,i)=>({u:e[0],v:e[1],pts:P[i]})),NV=n,out=Array.from({length:NV},()=>[]);
   const dir=h=>{const q=pc[h>>1].pts;return h&1?[...q].reverse():q};
   const en=h=>h&1?pc[h>>1].u:pc[h>>1].v;
   pc.forEach((x,i)=>{out[x.u].push(2*i);out[x.v].push(2*i+1)});
@@ -415,7 +401,7 @@ const DATA={node:nodeData,edge:edgeData,face:faceData};
 function view(){
   if(tab===1)return{kind:res&&res.kind,c:colors(),polys:res&&res.polys,bad:new Set()};
   const kind=mode(),d=DATA[kind](),bad=new Set();
-  if(d.err)return{kind,err:d.err,c:[],bad};
+  if(d.err)return{kind:null,err:d.err,c:[],bad};
   const c=d.names.map((_,i)=>mine[kind][i]??-1);
   d.A.forEach((s,i)=>s.forEach(j=>{if(c[i]>=0&&c[i]===c[j]){bad.add(i);bad.add(j)}}));
   return{kind,d,c,bad,polys:d.polys};
@@ -441,7 +427,7 @@ marks();
 board.addEventListener('click',e=>{
   if(tab!==2)return;
   const kind=mode(),t=e.target.closest('[data-i],[data-e],[data-f]'),id=t&&t.dataset[{node:'i',edge:'e',face:'f'}[kind]];
-  if(id==null)return;
+  if(id==null||view().err)return;
   if(pick<0)delete mine[kind][id];else mine[kind][id]=pick;
   render();
 });
